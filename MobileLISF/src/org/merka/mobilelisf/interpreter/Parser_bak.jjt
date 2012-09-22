@@ -1,0 +1,229 @@
+/*---------------------------------------------------------------------------------------------*/
+/*_______________________________________OPZIONI_______________________________________________*/
+
+options{
+    MULTI = true;
+    VISITOR = true;
+    OUTPUT_DIRECTORY = "ast";   /*Produce i file all'interno della directory ast*/
+    NODE_PACKAGE = "interprete.ast";       /*inserisce i file nel package ast*/
+}
+
+/*--------------------------------------------------------------------------------------------*/
+
+PARSER_BEGIN(Parser)
+
+  package interprete;
+  import interprete.ast.*;
+  import interprete.visitor.*;
+
+
+public class Parser{
+}
+PARSER_END(Parser)
+
+
+/*---------------------------------------------------------------------------------------------*/
+
+SKIP:
+{
+    " " /*Salta gli spazi*/
+    | "\n"
+    | "\t"
+}
+
+ASTProgramma Programma ():
+{}
+{
+    Comando() ";"( Comando() ";")* <EOF>
+        {
+            return jjtThis;
+        }
+}
+
+/*PENDENTE: inserire i comandi di stampa funzione e visualizza ast di funzione/comando*/
+/*mettere anche un comando per avere l'implementazione java di una funzione (un file .java)*/
+
+void Comando():
+{}
+{                                  
+    LOOKAHEAD(2) ( Variabile() "=" Funzione() )#ComandoAssegnamento
+    | LOOKAHEAD(2) ( Variabile() "(" Num() ")?") #ComandoCalcolo   /*pendente: Qui occorre memorizzare il Numero!!!*/
+    | ( Variabile() "?" ) #ComandoStampa
+    | ( "tree" Variabile() ) #ComandoAlbero
+    | "list" #ComandoElenco
+    | ("delete" Variabile()) #ComandoCancellaVariabile
+    | "delete all" #ComandoCancellaTutto
+    | ("draw" Variabile()) #ComandoDisegno
+}
+
+/*pendente: Inserire la azioni per manipolare lo stack*/
+void Funzione():
+{}
+{
+    Termine() (   "+" Termine()
+                | "-" Termine()
+              )*
+}
+
+void Termine():
+{}
+{
+    Monomio() (   "*" Monomio()
+                | "/" Monomio()
+              )*
+}
+
+void Monomio():
+{}
+{
+    /*Qui da un warning, cmq il parser funziona correttamente (stessa situazione del "dangling else")*/
+    /*l'esponente viene automaticamente associato all'espansione più interna*/
+    MonomioSemplice() [Esponente()]
+}
+
+void MonomioSemplice():
+{}
+{
+    Num()
+    | Variabile()   /*Funzione precedentemente inserita*/
+    | VariabileIndipendente() /* --> "x" */
+    | Seno()
+    | Coseno()
+    | Tangente()
+    | Cotangente()
+    | ArcoSeno()
+    | ArcoCoseno()
+    | ArcoTangente()
+    | ArcoCotangente()
+    | MonomioNegativo()
+    | LogaritmoNaturale()
+    | Logaritmo()
+    | ValoreAssoluto()
+    | Esponenziale()
+    | Fattoriale()
+    | Radice()
+    | "(" Funzione() ")"
+}
+
+void Num():
+{
+    Token t = null;
+}
+{
+    <INTERO> [ ( "." | "," ) <INTERO>]
+}
+
+void Esponente():
+{}
+{
+    "^" Num()
+}
+
+void Seno():
+{}
+{
+    ("sin" | "sen") Monomio()
+}
+
+void Coseno():
+{}
+{
+    "cos" Monomio()
+}
+
+void Tangente():
+{}
+{
+    ("tan" | "tg") Monomio()
+}
+
+void Cotangente():
+{}
+{
+    ("cotan" | "cotg") Monomio()
+}
+
+void ArcoSeno():
+{}
+{
+    ("arcsin" | "arcsen") Monomio()
+}
+
+void ArcoCoseno():
+{}
+{
+    "arccos" Monomio()
+}
+
+void ArcoTangente():
+{}
+{
+    ("arctan" | "arctg") Monomio()
+}
+
+void ArcoCotangente():
+{}
+{
+    ("arccotan" | "arccotg") Monomio()
+}
+
+void MonomioNegativo():
+{}
+{
+    "-" Monomio()
+}
+
+void LogaritmoNaturale():
+{}
+{
+    "ln" Monomio()
+}
+
+void Logaritmo():
+{}
+{
+    "log"["<"Num()">"] Monomio()
+}
+
+void ValoreAssoluto():
+{}
+{
+    "abs" Monomio()
+}
+
+void Esponenziale():
+{}
+{
+    "exp" Monomio()
+}
+
+void Fattoriale():
+{}
+{
+    "fact" Monomio()
+}
+
+void Radice():
+{}
+{
+    "\\" [Num()] "/" Monomio()
+}
+
+void Variabile():
+{}
+{
+    <VARLITERAL>
+}
+
+void VariabileIndipendente():
+{}
+{
+    <VARINDIPLITERAL>
+}
+
+TOKEN:
+{
+    <INTERO: "0" | ["1" - "9"](["0" - "9"])*>
+    | <VARLITERAL: (["a"-"v","y"-"z"] | ["A"-"V","Y"-"Z"]) (["0"-"9"] | ["a"-"z"] | ["A"-"Z"])*>
+    | <VARINDIPLITERAL: "x">
+}

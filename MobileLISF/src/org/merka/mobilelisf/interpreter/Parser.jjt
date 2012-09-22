@@ -1,0 +1,324 @@
+/*---------------------------------------------------------------------------------------------*/
+/*_______________________________________OPZIONI_______________________________________________*/
+
+options{
+    MULTI = true;
+    VISITOR = true;
+    OUTPUT_DIRECTORY = "ast";   /*Produce i file all'interno della directory ast*/
+    NODE_PACKAGE = "interprete.ast";       /*inserisce i file nel package ast*/
+}
+
+/*--------------------------------------------------------------------------------------------*/
+
+PARSER_BEGIN(Parser)
+
+  package interprete;
+  import interprete.ast.*;
+  import interprete.visitor.*;
+
+
+public class Parser{
+}
+PARSER_END(Parser)
+
+
+/*---------------------------------------------------------------------------------------------*/
+
+SKIP:
+{
+    " " /*Salta gli spazi*/
+    | "\n"
+    | "\t"
+}
+
+ASTProgramma Programma ():
+{}
+{
+    Comando() ";"( Comando() ";")* <EOF>
+        {
+            return jjtThis;
+        }
+}
+
+void Comando() #void:
+{
+    Token sgn = null;
+}
+{        
+                          
+/*A seguito di ognuna di queste produzioni viene creato un oggetto della classe specificata dopo
+il carattere #*/
+
+      LOOKAHEAD(2) ( Variabile() "=" Funzione() )#ComandoAssegnamento
+    | LOOKAHEAD(2) ( Variabile() "("[sgn = "-"] Num()
+
+/*Se è stato inserito il segno meno, si recupera il nodo di tipo Num creato e si inverte
+il segno dell'argomento*/
+                                                {
+                                                    if(sgn != null)
+                                                    {
+                                                        ASTNum num = (ASTNum)jjtree.peekNode();
+                                                        num.setValue(- num.getValue());
+                                                    }
+                                                } 
+                                                ")?") #ComandoCalcolo
+    | ( Variabile() "?" ) #ComandoStampa
+    | ( "tree" Variabile() ) #ComandoAlbero
+    | "list" #ComandoElenco
+    | ("delete" Variabile()) #ComandoCancellaVariabile
+    | "delete all" #ComandoCancellaTutto
+    | ("draw" Variabile()) #ComandoDisegno
+}
+
+
+void Funzione() #void:
+{}
+{
+/*Costruisce un'istanza di Somma (o Differenza) aggiungendo come figli i primi due nodi estratti 
+dallo stack. Quindi pone l'oggetto Somma sullo stack */
+    Termine() ("+" Termine() #Somma(2) | "-" Termine() #Differenza(2) )*           
+}
+
+void Termine() #void:
+{}
+{
+/*Coma sopra, ma con Prodotto (o Divisione)*/
+    Monomio() ( "*" Monomio() #Prodotto(2) | "/" Monomio() #Divisione(2) )*
+}
+
+void Monomio() #void():
+{}
+{
+    MonomioSemplice() ( "^" MonomioSemplice() #Monomio(2) )*
+}    
+
+void MonomioSemplice()#void:
+{
+    Node var;
+    Node arg = null;
+}
+{
+      Num()
+/*Funzione precedentemente inserita*/
+    | Variabile() 
+        {var = jjtree.popNode();}   
+                "(" Funzione() ")"
+                    {
+                        arg = jjtree.popNode();
+                    }
+         {
+            if (arg != null)
+            var.jjtAddChild(arg,0);
+            jjtree.pushNode(var);
+         }
+    | VariabileIndipendente()   /* --> "x" */
+    | Seno()
+    | Coseno()
+    | Tangente()
+    | Cotangente()
+    | ArcoSeno()
+    | ArcoCoseno()
+    | ArcoTangente()
+    | ArcoCotangente()
+    | MonomioNegativo()
+    | LogaritmoNaturale()
+    | Logaritmo()
+    | ValoreAssoluto()
+    | Esponenziale()
+    | Fattoriale()
+    | Radice()
+    | "(" Funzione() ")"
+}
+
+void Num():
+{
+    Token parteInt = null;
+    Token parteFraz = null;
+    double value;
+}
+{
+    parteInt = <INTERO> [parteFraz = <PARTEFRAZ>]
+        {
+            if (parteFraz == null)
+                value = Double.parseDouble(parteInt.image);
+            else
+                value = Double.parseDouble(parteInt.image+parteFraz.image);
+            jjtThis.setValue(value);
+        }
+}
+
+void Seno():
+{}
+{
+    ("sin" | "sen") Monomio()
+}
+
+void Coseno():
+{}
+{
+    "cos" Monomio()
+}
+
+void Tangente():
+{}
+{
+    ("tan" | "tg") Monomio()
+}
+
+void Cotangente():
+{}
+{
+    ("cotan" | "cotg") Monomio()
+}
+
+void ArcoSeno():
+{}
+{
+    ("arcsin" | "arcsen") Monomio()
+}
+
+void ArcoCoseno():
+{}
+{
+    "arccos" Monomio()
+}
+
+void ArcoTangente():
+{}
+{
+    ("arctan" | "arctg") Monomio()
+}
+
+void ArcoCotangente():
+{}
+{
+    ("arccotan" | "arccotg") Monomio()
+}
+
+void MonomioNegativo():
+{}
+{
+    "-" Monomio()
+}
+
+void LogaritmoNaturale():
+{}
+{
+    "ln" Monomio()
+}
+
+/*Pendente: è meglio mettere i figli di Logaritmo nell'ordine: 1-base, 2-argomento o il contrario?
+  Attualmente si adotta la prima*/
+
+void Logaritmo() #void:
+{
+    Node n, log, arg; /*Variabile appoggio*/
+    ASTNum num = null;
+}
+{
+    "log"["<"Num()">"
+            {
+                n = jjtree.popNode();   /*rimuovo l'eventuale Num dallo stack*/
+                num = (ASTNum) n;       /*cast sicuro: n è sicuramente un ASTNum*/
+            }
+         ] Monomio()
+            {
+                arg = jjtree.popNode(); /*rimuovo il dallo stack il sotto-albero creato dalla chiamata a Monomio()*/
+                if(num == null)         /*non è stata specificata la base del logaritmo => base = 10*/
+                    {
+                        num = new ASTNum(ParserTreeConstants.JJTNUM);
+                        num.setValue(10);
+                    }
+            /*Aggiungo i figli nell'ordine corretto*/
+            log = new ASTLogaritmo(ParserTreeConstants.JJTLOGARITMO);
+            log.jjtAddChild(num,0);
+            log.jjtAddChild(arg,1);
+            jjtree.pushNode(log);
+            }
+      #Logaritmo(false)
+}
+
+void ValoreAssoluto():
+{}
+{
+    "abs" Monomio()
+}
+
+void Esponenziale():
+{}
+{
+    "exp" Monomio()
+}
+
+void Fattoriale():
+{}
+{
+    "fact" Monomio()
+}
+
+/*Una radice è matematicamente identica ad un esponente frazionario --> 
+  si sceglie una rappresentazione omagenea tramite la classe ASTMonomio
+  Occorre creare "a mano" il seguente sotto-albero Monomio, corrispondente ad un radice:
+
+  \indice/arg --> arg^(1/indice)
+
+  Monomio               --> radiceFormaEsponenziale
+    Argomento           --> arg
+        <sotto-albero>  
+    Num             --> indice
+*/
+
+void Radice() #void:
+{
+    Node arg;
+    Node i = null;
+    ASTNum indice = null;
+}
+{
+    "\\" [Num()
+            {
+                i = jjtree.popNode();
+                indice = (ASTNum)i;
+                indice.setValue(1/indice.getValue());      /* Esponente = 1/indice */
+            }
+         ] "/" Monomio() 
+                    {
+                        if(indice == null) /*non è stato esplicitato l'indice => radice quadrata, indice=2*/
+                        {
+                            indice = new ASTNum(ParserTreeConstants.JJTNUM);
+                            indice.setValue(0.5);
+                        }
+                        arg = jjtree.popNode();
+                        ASTMonomio radiceFormaEsponenziale = new ASTMonomio(ParserTreeConstants.JJTMONOMIO);
+                        radiceFormaEsponenziale.jjtAddChild(arg,0);
+                        radiceFormaEsponenziale.jjtAddChild(indice,1);
+                        jjtree.pushNode(radiceFormaEsponenziale);
+                    }
+}
+
+void Variabile():
+{
+    Token t = null;
+}
+{
+    t = <VARLITERAL> 
+        {
+            jjtThis.setName(t.image);
+        }
+}
+
+void VariabileIndipendente():
+{}
+{
+    <VARINDIPLITERAL>
+}
+    
+
+TOKEN:
+{
+    /*Pendente: come fare per distinguere fra i token INTERO e PARTEFRAZ??*/
+    <INTERO: "0" | ["1" - "9"] (["0" - "9"])* >
+    | <PARTEFRAZ: "." (["0" - "9"])+>
+    | <VARLITERAL: (["a"-"v","y"-"z"] | ["A"-"V","Y"-"Z"]) (["0"-"9"] | ["a"-"z"] | ["A"-"Z"])*>
+    | <VARINDIPLITERAL: "x">
+}
